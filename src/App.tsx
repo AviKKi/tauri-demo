@@ -31,9 +31,29 @@ const Counter = () => {
 }
 
 const Index = () => {
-  return <ul>
+  return <ul style={{ display: 'flex', gap: '10px', flexDirection: 'column' }}>
     <Link to="/counter">Counter</Link>
+    <Link to="/reddit">Reddit</Link>
   </ul>
+}
+
+
+const Reddit = () => {
+  const [sub, setSub] = useState("")
+  const [data, setData] = useState<any>(undefined)
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => setSub(e.target.value)
+  const onLoad = () => {
+    invoke('get_subreddit', { sub }).then((res: any) => {
+      setData(JSON.parse(res))
+    })
+  }
+  const thumbnails = (data && data.data.children.map((ch: any) => ch.data.thumbnail).filter((x: any) => !!x)) || []
+  return <div>
+    <div>
+      <input value={sub} onChange={handleChange} /><button onClick={onLoad}>Load</button>
+      {thumbnails.map((t: any) => <img src={t} />)}
+    </div>
+  </div>
 }
 
 function App() {
@@ -44,6 +64,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/counter" element={<Counter />} />
+        <Route path="/reddit" element={<Reddit />} />
       </Routes>
     </BrowserRouter>
   </div>
