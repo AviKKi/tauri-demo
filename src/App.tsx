@@ -8,6 +8,7 @@ import {
   Route,
   Link,
 } from "react-router-dom";
+import Todo from './pages/todo';
 
 
 const Counter = () => {
@@ -34,6 +35,7 @@ const Index = () => {
   return <ul style={{ display: 'flex', gap: '10px', flexDirection: 'column' }}>
     <Link to="/counter">Counter</Link>
     <Link to="/reddit">Reddit</Link>
+    <Link to="/todo">Todo List</Link>
   </ul>
 }
 
@@ -65,6 +67,7 @@ function App() {
         <Route path="/" element={<Index />} />
         <Route path="/counter" element={<Counter />} />
         <Route path="/reddit" element={<Reddit />} />
+        <Route path="/todo" element={<Todo />} />
       </Routes>
     </BrowserRouter>
   </div>

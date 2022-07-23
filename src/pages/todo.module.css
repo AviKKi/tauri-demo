@@ -1,0 +1,20 @@
+.newForm {
+  display: flex;
+  gap: 5px;
+  flex-direction: column;
+  max-width: 200px;
+}
+
+.todoCardsWrapper {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 0;
+  gap: 5px;
+}
+
+.todoCard {
+  color: #002e38;
+  border: 2px solid #0087a5;
+  border-radius: 5px;
+  padding: 5px;
+}
