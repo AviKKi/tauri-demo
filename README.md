@@ -1,46 +1,250 @@
-# Getting Started with Create React App
+# Tauri demo app
+This app was built by me to test tauri. With ~16 hours of work googling and copy pasting I have been able to achieve following with a React+Rust code.
+- State managed by rust
+- API calls made by rust and front-end gets to show it
+- Storing data in an embdded sqlite db
+- embedding migrations to the exe so that we can ship single binary, with all migrations included
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+### Development Log
 
-## Available Scripts
+#### Setting up the project
+https://kent.medium.com/get-started-making-desktop-apps-using-rust-and-react-78a7e07433ce
 
-In the project directory, you can run:
+just create a react app, then init rust code inside it. update npm run scripts and you are good to go.
 
-### `npm start`
+#### Basics of Tauri
+- Tauri uses WebView for renderig HTML UI.
+- WebView and main rust application are different processes.
+- To communicate from UI to backend(rust process) we have 2 method, 
+  - Events - events are like one-way notification
+  - Commands - these are rust functions annotate with `#[tauri_command]`, and registered with `.invoke_handler(tauri::generate_handler![])` method. After this you can call these commands from JS as `invoke('update_count', { update: 1 }).then((c: any) => setCount(c))`
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+#### Shared State in Tauri
+You can create a shared variable, that can be accessed in all commands. This can useful to store a multitude of values
 
-### `npm test`
+- Business logic specific varibles.
+- Database connection
+- Variable shared between multiple windows(yes you can have multiple windows and do crazy message passing).
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+Example -
 
-### `npm run build`
+```rs
+struct AppState {
+    count: Mutex<i64>,
+}
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+#[tauri::command]
+fn get_count(state: tauri::State<AppState>) -> i64 {
+    state.count.lock().unwrap().clone()
+}
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+#[tauri::command]
+fn update_count(update: i64, state: tauri::State<AppState>) -> i64 {
+    let mut cnt = state.count.lock().unwrap();
+    *cnt += update;
+    cnt.clone()
+}
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+fn main(){
+  let state = AppState {
+    count: Default::default(),
+  };
 
-### `npm run eject`
+  tauri::Builder::default()
+    .manage(state)
+    .invoke_handler(tauri::generate_handler![
+        get_count,
+        update_count,
+    ])
+    .run(tauri::generate_context!())
+    .expect("error while running tauri application");
+}
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+```
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+#### API Calling
+`reqwest` is the HTTP client in rust which makes API calling pretty easy.
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+```rs
+#[tauri::command]
+async fn get_subreddit(sub: String) -> String {
+    println!("{}", sub);
+    let url = format!("https://reddit.com/r/{}.json", sub);
+    let res = reqwest::get(url);
+    let body = res.await;
+    if body.is_err() {
+        return String::from("");
+    }
+    let unwrapped = body.unwrap();
+    let text = unwrapped.text();
+    let body = text.await;
+    if body.is_err() {
+        return String::from("");
+    }
+    let return_val = body.unwrap();
+    return return_val;
+}
+```
 
-## Learn More
+#### Storing data in SQLite database
+Due to less number of tutorials and libraries, I found this pretty tricky. 
+`diesel` is the SQL ORM I used.
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+##### Installation
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+1) Add deps to `Cargo.toml`
+```
+diesel = { version = "1.4.0", features = ["sqlite"] }
+dotenv = "0.10"
+```
+
+
+2) Install diesel_cli, `cargo install diesel_cli --no-default-features --features "sqlite-bundled"`
+
+Note: sqlite-bundled means precompiled binary included, compiling custom lib in windows can be a bit tricky.
+
+3) Add Database URL to .env
+4) `$ diesel setup`
+5) `$ diesel migration generate create_todos_table`
+6) Put below code in newly generated migration files
+```sql
+// up.sql
+CREATE TABLE todos (
+  id INTEGER NOT NULL PRIMARY KEY,
+  title VARCHAR NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  done BOOLEAN NOT NULL DEFAULT 'f'
+);
+
+// down.sql
+DROP TABLE todos;
+```
+7) `$ diesel migration run`
+8) create your models in `src/db/models.rs`
+```rs
+use crate::schema::todos; // refers to the schema file generated by diesel
+use serde::{Serialize, Deserialize}; // makes object of this class json serializable, we will convert these objects to json and send to user. 
+
+#[derive(Queryable, Serialize, Debug)] // these annotation adds extra functionality to objects of this struct, Debug is for printing in console `dbg!(todo)`
+pub struct Todo {
+    pub id: i32,
+    pub title: String,
+    pub body: String,
+    pub done: bool,
+}
+
+
+#[derive(Insertable, Serialize, Debug, Clone)]
+#[table_name = "todos"]
+pub struct NewTodo<'a> {  // this struct will be use when inserting into the db, a struct can be Queryable and Insertable at the same time too. 
+    pub title: &'a str,
+    pub body: &'a str,
+}
+```
+
+9) Create connection and query modules
+```rs
+extern crate dotenv;
+
+pub mod models;
+use crate::schema::*;
+use diesel::prelude::*;
+use dotenv::dotenv;
+use models::{NewTodo, Todo};
+use std::env;
+
+pub fn establish_connection() -> SqliteConnection { // creates a new connection to the DB and returns reference
+    dotenv().ok();
+
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    SqliteConnection::establish(&database_url)
+        .unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
+}
+```
+
+#### DB query and Serialization
+1) Insert
+```rs
+  new_todo = NewTodo { title, body };
+  let todo = diesel::insert_into(todos::table)
+      .values(&new_todo)
+      .execute(conn)
+      .expect("Error saving new post");
+  let todo_json  =serde_json::to_string(&todo).unwrap();
+  todo_json
+```
+2) SELECT * FROM todos;
+```rs
+  let all_todos = todos::dsl::todos
+      .load::<Todo>(conn)
+      .expect("Expect loading posts");
+  let serialized = serde_json::to_string(&all_todos).unwrap();
+  serialized
+```
+3) Delete
+```rs
+  use todos::dsl::{ id};
+  let t = todos::dsl::todos.filter(id.eq(&qid));
+  diesel::delete(t)
+      .execute(conn)
+      .expect("error deleting todo");
+```
+4) Update
+```rs
+  use todos::dsl::{done, id};
+  diesel::update(todos::dsl::todos.filter(id.eq(&qid)))
+      .set(done.eq(!t.done))
+      .execute(conn)
+      .expect("Error updating");
+  let updated = todos::dsl::todos
+      .filter(id.eq(&qid))
+      .first::<Todo>(conn)
+      .expect("Todo not found");
+  serde_json::to_string(&updated).unwrap()
+```
+
+In above we are first updating a row then doing another query to read it. This is because SQLite doesn't support sending updated rows/ids as return value of update statement.
+
+
+#### Building the bin
+
+Add dep `libsqlite3-sys = { version = "0.9.1", features = ["bundled"] }` the sqlite lib we downloaded was for CLI, to build a binary we need to add this dep.
+
+```
+$ npm run build
+$ npm run tauri build
+```
+This will create the binary but you still have one problem, newly create sqlite file won't have the tables, so you'll have to copy it in same directory as exe.
+
+#### Embedded Migration
+To migrate sqlite file, you need migrations file and cargo cli to run migrations, `diesel_migrations` will do both for us
+```toml
+# Cargo.toml
+diesel_migrations = { version = "1.4.0", features = ["sqlite"] }
+```
+
+```rs
+// main.rs
+#[macro_use]
+extern crate diesel;
+#[macro_use] 
+extern crate diesel_migrations;
+embed_migrations!("./migrations/");
+.........
+
+fn main(){
+  let conn = db::establish_connection();
+  diesel_migrations::run_pending_migrations(&conn).expect("Error migrating");
+  ..........
+}
+```
+
+- embed_migrations! will scan given folder for migration files and will add all those to final build (exe)
+- `diesel_migrations::run_pending_migrations(&conn)` will check the db for files
+
+#### Fix rust rebuilding on each db commit
+every time you will write to the db your rust application will restart, this is becase changing any file in `src-tauri` library will trigger a rebuild
+
+in .env file add `TAURI_DEV_WATCHER_IGNORE_FILE=.taurignore` and in `.taruignore` add `store.sqlite` 
