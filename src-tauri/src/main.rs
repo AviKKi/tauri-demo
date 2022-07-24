@@ -2,6 +2,8 @@
     all(not(debug_assertions), target_os = "windows"),
     windows_subsystem = "windows"
 )]
+use diesel_migrations::{embed_migrations, EmbedMigrations};
+
 
 use reqwest::Url;
 use tauri::App;
@@ -13,6 +15,10 @@ use std::{error, string, sync::Mutex};
 // use super::db::{};
 #[macro_use]
 extern crate diesel;
+#[macro_use] 
+extern crate diesel_migrations;
+embed_migrations!("./migrations/");
+
 use diesel::prelude::*;
 pub mod schema;
 pub mod db;
@@ -81,10 +87,14 @@ async fn get_subreddit(sub: String) -> String {
 }
 
 fn main() {
+    let conn = db::establish_connection();
     let state = AppState {
         count: Default::default(),
         conn: Mutex::new(db::establish_connection()),
     };
+
+    // embedded_migrations::run(&conn);
+    diesel_migrations::run_pending_migrations(&conn).expect("Error migrating");
     tauri::Builder::default()
         .manage(state)
         .invoke_handler(tauri::generate_handler![

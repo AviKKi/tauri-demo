@@ -30,7 +30,6 @@ pub fn todos_list(conn: &SqliteConnection) -> String {
         .load::<Todo>(conn)
         .expect("Expect loading posts");
     let serialized = serde_json::to_string(&all_todos).unwrap();
-    dbg!(all_todos);
     serialized
 }
 

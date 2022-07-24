@@ -21,6 +21,7 @@ tauri = { version = "1.0.5", features = ["api-all"] }
 reqwest = { version = "0.11.11", features = ["json"] }
 diesel = { version = "1.4.0", features = ["sqlite"] }
 libsqlite3-sys = { version = "0.9.1", features = ["bundled"] }
+diesel_migrations = { version = "1.4.0", features = ["sqlite"] }
 dotenv = "0.10"
 
 [features]
