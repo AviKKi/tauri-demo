@@ -218,7 +218,7 @@ $ npm run tauri build
 ```
 This will create the binary but you still have one problem, newly create sqlite file won't have the tables, so you'll have to copy it in same directory as exe.
 
-#### Embedded Migration
+### Embedded Migration
 To migrate sqlite file, you need migrations file and cargo cli to run migrations, `diesel_migrations` will do both for us
 ```toml
 # Cargo.toml
@@ -244,7 +244,23 @@ fn main(){
 - embed_migrations! will scan given folder for migration files and will add all those to final build (exe)
 - `diesel_migrations::run_pending_migrations(&conn)` will check the db for files
 
-#### Fix rust rebuilding on each db commit
+### Fix rust rebuilding on each db commit
 every time you will write to the db your rust application will restart, this is becase changing any file in `src-tauri` library will trigger a rebuild
 
 in .env file add `TAURI_DEV_WATCHER_IGNORE_FILE=.taurignore` and in `.taruignore` add `store.sqlite` 
+
+### Future topics to explore
+- Publishing apps with updates and auto-tagging
+- automatic ts defination generation for tauri-commands
+- refactoring the backend into seperate plugins
+- Directly accessing sqlite db from node giving the fs access.
+- Exploring OS specific UI like notification and menu.
+- Exploring react libraries for making cross-platform UI
+- Checking if I can use transparent, glass materials of windows UI.
+- Cross Platform Compilation with docker
+- Building for Android and iOS
+
+### Some Sample App Ideas to work on
+- File Converter
+- Youtube Video Downloader
+- Reddit scrapper
